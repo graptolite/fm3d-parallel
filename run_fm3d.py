@@ -154,6 +154,39 @@ def combine_frechet(out,frechs):
         outfile.write("\n".join(all_lines))
     return
 
+def combine_rays(out,rays):
+    counter = 0
+    all_lines = []
+    for ray in rays:
+        with open(ray) as infile:
+            data = infile.read().split("\n")
+
+        lines = []
+        idxs = []
+        for i,l in enumerate(data):
+            l_data = [x for x in l.split(" ") if x]
+            if len(l_data) > 3 and not re.search("[A-z]",l):
+                lines.append(l_data)
+                idxs.append(i)
+        idxs.append(len(data))
+
+        unique_evs = []
+        for i,l_data in enumerate(lines):
+            ev = l_data[1]
+            if ev not in unique_evs:
+                unique_evs.append(ev)
+                counter += 1
+            l_data[1] = str(counter)
+            lines[i] = l_data
+
+        for idx,line in zip(idxs,lines):
+            data[idx] = "\t".join(line)
+        all_lines.extend(data)
+
+    with open(out,"w") as outfile:
+        outfile.write("\n".join(all_lines))
+    return
+
 print("running on",cores,"cores")
 
 active_dir = ".tmp"
@@ -197,5 +230,8 @@ except FileNotFoundError:
     pass
 arrival_fs = [os.path.join(active_dir,str(i),"arrivals.dat") for i in range(cores)]
 frechet_fs = [os.path.join(active_dir,str(i),"frechet.dat") for i in range(cores)]
+ray_fs = [os.path.join(active_dir,str(i),"rays.dat") for i in range(cores)]
 combine_arrivals("arrivals.dat",arrival_fs)
 combine_frechet("frechet.dat",frechet_fs)
+if os.path.exists(ray_fs[0]):
+    combine_rays("rays.dat",ray_fs)
