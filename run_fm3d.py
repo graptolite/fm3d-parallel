@@ -18,7 +18,7 @@ except:
 ############################################
 # TO BE MODIFIED ON A PER-SYSTEM BASIS     #
 # Path to the fmtomo binaries/executables. #
--fmtomo_bin = "<path to fmtomo bin>"
+fmtomo_bin = "<path to fmtomo bin>"
 ############################################
 
 def fmtomo(cmd,wd="./"):
