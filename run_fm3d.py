@@ -37,6 +37,17 @@ def fmtomo(cmd,wd="./"):
     os.chdir(owd)
     return
 
+def check_source_inversion():
+    ''' Read invert3d.in to determine whether sources are to be inverted for (which affects what files need to be pushed to each core's subdirectory).
+
+    Returns: <bool> | whether source inversion is turned on.
+    '''
+    with open("invert3d.in") as infile:
+        lines = infile.read().split("\n")
+    # Read status of source inversion switch (either "0" or "1").
+    source_inversion = lines[24].split(" ")[0]
+    return bool(int(source_inversion))
+
 def modify_receiver_source(receiver_data,new_source):
     ''' Replace the source id (integer) inside some receiver data with a new source id.
 
@@ -134,21 +145,31 @@ def split_sources(cores,tmp=".tmp"):
         os.mkdir(tmp)
     # Load dictionary holding relation between sources and the receivers that picked them up.
     receiver_dict = load_receiver_dict()
-    # Load list of sources (described by data blocks).
+    # Load list of sources and sourcesref (described by data blocks).
     sources = load_sources_list()
-    # Split the list of sources into roughly equal length sublists, with the number of sublists being equal to the number of cores.
+    sources_ref = load_sources_list("sourcesref.in")
+    # Prevent cores exceeding the number of sources.
+    if len(sources) < cores:
+        cores = len(sources)
+        print("Reduced cores to",cores)
+    if len(sources) != len(sources_ref):
+        raise ValueError("Sources doesn't match sources ref")
+    # Split the list of sources and reference sources into roughly equal length sublists, with the number of sublists being equal to the number of cores.
     distrib_s = np.array_split(sources,cores)
+    distrib_sref = np.array_split(sources_ref,cores)
     # Initialize list to hold paths to subfolders over which source distribution happens.
     wds = []
     # Iterate through the sublists.
-    for i,sub_s in enumerate(distrib_s):
+    for i,(sub_s,sub_sr) in enumerate(zip(distrib_s,distrib_sref)):
         # Ensure the presence of a subfolder corresponding to the active sublist index, which corresponds to a core index (unique but disordered).
         t_wd = os.path.join(tmp,str(i))
         if not os.path.exists(t_wd):
             os.mkdir(t_wd)
-        # Write the subfolder's sources.in containing just the sources in the active sources sublist.
+        # Write the subfolder's sources.in and sourcesref.in containing just the sources in the active sources sublist.
         with open(os.path.join(t_wd,"sources.in"),"w") as outfile:
             outfile.write("\n".join([str(len(sub_s))] + [x[1] for x in sub_s]))
+        with open(os.path.join(t_wd,"sourcesref.in"),"w") as outfile:
+            outfile.write("\n".join([str(len(sub_sr))] + [x[1] for x in sub_sr]))
         # Extract source ids for all sources in the active sources sublist.
         source_ids = [int(x[0]) for x in sub_s]
         # Create a normalized, sublist-independent list of source ids (i.e. starting at 1, only for the sources within the active source sublist)
@@ -169,7 +190,7 @@ def split_sources(cores,tmp=".tmp"):
             outfile.write("\n".join([str(len(active_receivers))] + active_receivers))
         # Store the path of the subfolder.
         wds.append(t_wd)
-    return wds
+    return wds,cores
 
 def combine_arrivals(out,fs):
     ''' Combine data in multiple ordered `arrivals.dat` files and save to disk.
@@ -214,7 +235,7 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
     # Iterate through the list of ray separated datafile paths.
     for rs_f in ray_sep_datafiles:
         # Load ray separated data in line format.
-        with open(frech) as infile:
+        with open(rs_f) as infile:
             data = infile.read().split("\n")
         # Initialize lists to hold the lines containing ray (source-receiver) data (the "header" of a data block) and their corresponding line indices.
         lines = []
@@ -263,19 +284,17 @@ def execute(working_dir):
     files = ["frechgen.in","frechet.in","interfaces.in","propgrid.in","vgrids.in","mode_set.in","ak135.hed","ak135.tbl"]
     for f in files:
         try:
-            shutil.copy2(f,working_dir)
+            os.symlink(os.path.join(os.getcwd(),f),os.path.join(working_dir,f))
         except:
             print("Failed to find file",f)
-    shutil.copy2("interfaces.in",os.path.join(working_dir,"interfacesref.in"))
-    shutil.copy2("vgrids.in",os.path.join(working_dir,"vgridsref.in"))
-    # Store the path of the current working directory.
-    owd = os.getcwd()
-    # Move to the desired fm3d working directory.
-    os.chdir(working_dir)
+    os.symlink(os.path.join(os.getcwd(),"interfaces.in"),os.path.join(working_dir,"interfacesref.in"))
+    os.symlink(os.path.join(os.getcwd(),"vgrids.in"),os.path.join(working_dir,"vgridsref.in"))
+    # If source inversion is turned on, then frechgen needs to be rerun in each core's subdirectory.
+    if check_source_inversion():
+        os.symlink(os.path.join(os.getcwd(),"invert3d.in"),os.path.join(working_dir,"invert3d.in"))
+        fmtomo("frechgen",working_dir)
     # Execute fm3d.
-    fmtomo("fm3d")
-    # Move back to the original working directory.
-    os.chdir(owd)
+    fmtomo("fm3d",working_dir)
     return
 
 def parallel(f,cores,args):
@@ -291,28 +310,29 @@ def parallel(f,cores,args):
         out = p.map(f,args)
     return out
 
-# Show the number of requested cores.
-print("Running on",cores,"cores")
-# Declare the tmp dir into which source-split subfolders will be saved.
-active_dir = ".tmp"
-# Ensure this tmp dir exists.
-if not os.path.exists(active_dir):
-    os.mkdir(active_dir)
-# Clean this tmp dir in case there's anything inside it.
-for f in os.listdir(active_dir):
-    shutil.rmtree(os.path.join(active_dir,f))
-# Split the sources across the desired number of cores.
-pick_wds = split_sources(cores,tmp=active_dir)
-# Execute fm3d on all of the sources sublists.
-parallel(execute,cores,pick_wds)
-print("Finished")
-# Join up the outputs from fm3d execution on all sources sublists.
-arrival_fs = [os.path.join(active_dir,str(i),"arrivals.dat") for i in range(cores)]
-frechet_fs = [os.path.join(active_dir,str(i),"frechet.dat") for i in range(cores)]
-ray_fs = [os.path.join(active_dir,str(i),"rays.dat") for i in range(cores)]
-combine_arrivals("arrivals.dat",arrival_fs)
-combine_ray_sep_data("frechet.dat",frechet_fs)
-if os.path.exists(ray_fs[0]):
-    combine_ray_sep_data("rays.dat",ray_fs)
-# Remove the tmp dir.
-shutil.rmtree(active_dir)
+if __name__=="__main__":
+    # Show the number of requested cores.
+    print("Running on",cores,"cores")
+    # Declare the tmp dir into which source-split subfolders will be saved.
+    active_dir = ".tmp"
+    # Ensure this tmp dir exists.
+    if not os.path.exists(active_dir):
+        os.mkdir(active_dir)
+    # Clean this tmp dir in case there's anything inside it.
+    for f in os.listdir(active_dir):
+        shutil.rmtree(os.path.join(active_dir,f))
+    # Split the sources across the desired number of cores.
+    pick_wds,cores = split_sources(cores,tmp=active_dir)
+    # Execute fm3d on all of the sources sublists.
+    parallel(execute,cores,pick_wds)
+    print("Finished")
+    # Join up the outputs from fm3d execution on all sources sublists.
+    arrival_fs = [os.path.join(active_dir,str(i),"arrivals.dat") for i in range(cores)]
+    frechet_fs = [os.path.join(active_dir,str(i),"frechet.dat") for i in range(cores)]
+    ray_fs = [os.path.join(active_dir,str(i),"rays.dat") for i in range(cores)]
+    combine_arrivals("arrivals.dat",arrival_fs)
+    combine_ray_sep_data("frechet.dat",frechet_fs)
+    if os.path.exists(ray_fs[0]):
+        combine_ray_sep_data("rays.dat",ray_fs)
+    # Remove the tmp dir.
+    shutil.rmtree(active_dir)
