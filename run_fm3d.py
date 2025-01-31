@@ -218,6 +218,8 @@ def combine_arrivals(out,fs):
         dfs.extend(dfs_tmp)
     # Combine all source-grouped arrivals data together into one dataframe.
     df = pd.concat(dfs)
+    # Reset ray index column.
+    df[0] = np.arange(1,len(df)+1)
     # Save the combined data.
     df.to_csv(out,header=None,index=None,sep="\t")
     return
@@ -228,15 +230,19 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
     out               | <str>          | path to the file to store the combined output in.
     ray_sep_datafiles | <list> [<str>] | ordered list of paths to the ray separated datafiles whose contents are to be combined.
     '''
+    # Initialize ray indexer.
+    ray_idx = 1
     # Initialize the global (=canonical) source id counter, which is 1-indexed in fmtomo but set to zero here as increment of this counter happens prior to the first instance of it being used to modify a ray data block.
     counter = 0
     # Initialize the list of lines that containing the combined per-ray data.
     all_lines = []
+    # Initialize counter of the number of events that have been considered.
+    n_evs_prev = 0
     # Iterate through the list of ray separated datafile paths.
     for rs_f in ray_sep_datafiles:
         # Load ray separated data in line format.
         with open(rs_f) as infile:
-            data = infile.read().split("\n")
+            data = [l for l in infile.read().split("\n") if l.strip()]
         # Initialize lists to hold the lines containing ray (source-receiver) data (the "header" of a data block) and their corresponding line indices.
         lines = []
         idxs = []
@@ -262,12 +268,24 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
                 # If so, add this normalized event id to the list of considered, and increment the global event counter.
                 unique_evs.append(ev)
                 counter += 1
+            # Ensure the ray index is as expected.
+            l_data[0] = str(ray_idx)
             # Ensure the event id in the header line corresponds to the event's global event id, and update the active ray data.
             l_data[1] = str(counter)
             lines[i] = l_data
+            ray_idx += 1
         # Convert the column-separated data lines back into string rows.
         for idx,line in zip(idxs,lines):
             data[idx] = "\t".join(line)
+        # Modify the final 4 frechet lines per event.
+        for idx in idxs:
+            for subtract in range(1,5):
+                bad_frech = [x for x in data[idx-subtract].replace("\t"," ").split(" ") if x.strip()]
+                print(bad_frech)
+                bad_frech[0] = str(int(bad_frech[0]) + 4 * n_evs_prev)
+                data[idx-subtract] = "\t".join(bad_frech)
+        # Update the number of events that have been considered.
+        n_evs_prev += len(unique_evs)
         # Store these string rows into the combined ray data.
         all_lines.extend(data)
     # Save the combined data.
@@ -281,7 +299,7 @@ def execute(working_dir):
     working_dir | <str> | path to the working dir where fm3d will be executed. `sources.in` and `receivers.in` must be present in this directory.
     '''
     # Copy input and auxiliary files necessary for fm3d execution from the current working dir.
-    files = ["frechgen.in","frechet.in","interfaces.in","propgrid.in","vgrids.in","mode_set.in","ak135.hed","ak135.tbl"]
+    files = ["frechgen.in","interfaces.in","propgrid.in","vgrids.in","mode_set.in","ak135.hed","ak135.tbl"]
     for f in files:
         try:
             os.symlink(os.path.join(os.getcwd(),f),os.path.join(working_dir,f))
@@ -289,6 +307,7 @@ def execute(working_dir):
             print("Failed to find file",f)
     os.symlink(os.path.join(os.getcwd(),"interfaces.in"),os.path.join(working_dir,"interfacesref.in"))
     os.symlink(os.path.join(os.getcwd(),"vgrids.in"),os.path.join(working_dir,"vgridsref.in"))
+    shutil.copy("frechet.in",working_dir)
     # If source inversion is turned on, then frechgen needs to be rerun in each core's subdirectory.
     if check_source_inversion():
         os.symlink(os.path.join(os.getcwd(),"invert3d.in"),os.path.join(working_dir,"invert3d.in"))
