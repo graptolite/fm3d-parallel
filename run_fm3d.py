@@ -277,13 +277,13 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
         # Convert the column-separated data lines back into string rows.
         for idx,line in zip(idxs,lines):
             data[idx] = "\t".join(line)
-        # Modify the final 4 frechet lines per event.
-        for idx in idxs:
-            for subtract in range(1,5):
-                bad_frech = [x for x in data[idx-subtract].replace("\t"," ").split(" ") if x.strip()]
-                print(bad_frech)
-                bad_frech[0] = str(int(bad_frech[0]) + 4 * n_evs_prev)
-                data[idx-subtract] = "\t".join(bad_frech)
+        if "frechet" in out:
+            # Modify the final 4 frechet lines per event.
+            for idx in idxs[1:]:
+                for subtract in range(1,5):
+                    bad_frech = [x for x in data[idx-subtract].replace("\t"," ").split(" ") if x.strip()]
+                    bad_frech[0] = str(int(bad_frech[0]) + 4 * n_evs_prev)
+                    data[idx-subtract] = "\t".join(bad_frech)
         # Update the number of events that have been considered.
         n_evs_prev += len(unique_evs)
         # Store these string rows into the combined ray data.
@@ -299,18 +299,16 @@ def execute(working_dir):
     working_dir | <str> | path to the working dir where fm3d will be executed. `sources.in` and `receivers.in` must be present in this directory.
     '''
     # Copy input and auxiliary files necessary for fm3d execution from the current working dir.
-    files = ["frechgen.in","interfaces.in","propgrid.in","vgrids.in","mode_set.in","ak135.hed","ak135.tbl"]
+    files = ["frechgen.in","interfaces.in","interfacesref.in","propgrid.in","vgrids.in","vgridsref.in","mode_set.in","ak135.hed","ak135.tbl"]
     for f in files:
         try:
             os.symlink(os.path.join(os.getcwd(),f),os.path.join(working_dir,f))
         except:
             print("Failed to find file",f)
-    os.symlink(os.path.join(os.getcwd(),"interfaces.in"),os.path.join(working_dir,"interfacesref.in"))
-    os.symlink(os.path.join(os.getcwd(),"vgrids.in"),os.path.join(working_dir,"vgridsref.in"))
     shutil.copy("frechet.in",working_dir)
     # If source inversion is turned on, then frechgen needs to be rerun in each core's subdirectory.
     if check_source_inversion():
-        os.symlink(os.path.join(os.getcwd(),"invert3d.in"),os.path.join(working_dir,"invert3d.in"))
+        shutil.copy(os.path.join(os.getcwd(),"invert3d.in"),os.path.join(working_dir,"invert3d.in"))
         fmtomo("frechgen",working_dir)
     # Execute fm3d.
     fmtomo("fm3d",working_dir)
