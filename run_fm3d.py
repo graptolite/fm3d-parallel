@@ -224,6 +224,13 @@ def combine_arrivals(out,fs):
     df.to_csv(out,header=None,index=None,sep="\t")
     return
 
+def check_source_reloc():
+    with open("invert3d.in") as infile:
+        data = infile.read().split("\n")
+    if data[23].split(" ")[0] == "1":
+        return True
+    return False
+
 def combine_ray_sep_data(out,ray_sep_datafiles):
     ''' Combine data in multiple ordered ray separated datafiles (e.g. `frechet.dat` or `rays.dat`) and save to disk. These files have the general format of ray-specific data separated by headers (rows of data) containing ray information (event id and receiver ordering).
 
@@ -278,12 +285,14 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
         for idx,line in zip(idxs,lines):
             data[idx] = "\t".join(line)
         if "frechet" in out:
-            # Modify the final 4 frechet lines per event.
-            for idx in idxs[1:]:
-                for subtract in range(1,5):
-                    bad_frech = [x for x in data[idx-subtract].replace("\t"," ").split(" ") if x.strip()]
-                    bad_frech[0] = str(int(bad_frech[0]) + 4 * n_evs_prev)
-                    data[idx-subtract] = "\t".join(bad_frech)
+            # Check if relocation was turned on - if so, need to correct the last 4 frechet indices.
+            if check_source_reloc():
+                # Modify the final 4 frechet lines per event.
+                for idx in idxs[1:]:
+                    for subtract in range(1,5):
+                        bad_frech = [x for x in data[idx-subtract].replace("\t"," ").split(" ") if x.strip()]
+                        bad_frech[0] = str(int(bad_frech[0]) + 4 * n_evs_prev)
+                        data[idx-subtract] = "\t".join(bad_frech)
         # Update the number of events that have been considered.
         n_evs_prev += len(unique_evs)
         # Store these string rows into the combined ray data.
@@ -291,6 +300,44 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
     # Save the combined data.
     with open(out,"w") as outfile:
         outfile.write("\n".join(all_lines))
+    return
+
+def combine_arrtimes(arrtimes_fs):
+    ev_counter = 0
+    all_lines = []
+    for i,arrtimes_f in enumerate(arrtimes_fs):
+        with open(arrtimes_f) as infile:
+            data = [l for l in infile.read().split("\n") if l.strip()]
+        # Add the overall header just once.
+        if i == 0:
+            all_lines.extend(data[:4])
+        data = data[4:]
+        for l in data:
+            possible_header = [x for x in l.split(" ") if x.strip()]
+            if len(possible_header) > 1:
+                # Is header
+                ev_counter += 1
+                possible_header[0] = str(ev_counter)
+                all_lines.append("           " + "           ".join(possible_header))
+            else:
+                all_lines.append(l)
+    all_lines[3] = "          " + str(ev_counter)
+    with open("arrtimes.dat","w") as outfile:
+        outfile.write("\n".join(all_lines))
+    return
+
+def get_n_sources(wd="./"):
+    with open(os.path.join(wd,"sources.in")) as infile:
+        n_sources = int(infile.read().split("\n")[0].strip())
+    return n_sources
+
+def generate_gridsave(wd):
+    n_sources = get_n_sources(wd)
+    gridsave = ""
+    for i in range(1,n_sources+1):
+        gridsave += "%u 1\n1\n1\n" % i
+    with open(os.path.join(wd,"gridsave.in"),"w") as outfile:
+        outfile.write(gridsave)
     return
 
 def execute(working_dir):
@@ -310,6 +357,7 @@ def execute(working_dir):
     if check_source_inversion():
         shutil.copy(os.path.join(os.getcwd(),"invert3d.in"),os.path.join(working_dir,"invert3d.in"))
         fmtomo("frechgen",working_dir)
+    generate_gridsave(working_dir)
     # Execute fm3d.
     fmtomo("fm3d",working_dir)
     return
@@ -347,9 +395,12 @@ if __name__=="__main__":
     arrival_fs = [os.path.join(active_dir,str(i),"arrivals.dat") for i in range(cores)]
     frechet_fs = [os.path.join(active_dir,str(i),"frechet.dat") for i in range(cores)]
     ray_fs = [os.path.join(active_dir,str(i),"rays.dat") for i in range(cores)]
+    arrtimes_fs = [os.path.join(active_dir,str(i),"arrtimes.dat") for i in range(cores)]
     combine_arrivals("arrivals.dat",arrival_fs)
     combine_ray_sep_data("frechet.dat",frechet_fs)
     if os.path.exists(ray_fs[0]):
         combine_ray_sep_data("rays.dat",ray_fs)
+    if os.path.exists(arrtimes_fs[0]):
+        combine_arrtimes(arrtimes_fs)
     # Remove the tmp dir.
     shutil.rmtree(active_dir)
