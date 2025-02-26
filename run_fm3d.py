@@ -42,11 +42,18 @@ def check_source_inversion():
 
     Returns: <bool> | whether source inversion is turned on.
     '''
-    with open("invert3d.in") as infile:
-        lines = infile.read().split("\n")
-    # Read status of source inversion switch (either "0" or "1").
-    source_inversion = lines[24].split(" ")[0]
-    return bool(int(source_inversion))
+    try:
+        with open("invert3d.in") as infile:
+            lines = infile.read().split("\n")
+        # Read status of source inversion switch (either "0" or "1").
+        source_inversion = lines[24].split(" ")[0]
+        return bool(int(source_inversion))
+    except FileNotFoundError:
+        # Check whether uncertainties are provided in sourcesref.in for relocation.
+        with open("sourcesref.in") as infile:
+            first_source = infile.read().split("\n")[2]
+        data = [x for x in first_source.split(" ") if x.strip()]
+        return (len(data) > 3)
 
 def modify_receiver_source(receiver_data,new_source):
     ''' Replace the source id (integer) inside some receiver data with a new source id.
@@ -224,13 +231,6 @@ def combine_arrivals(out,fs):
     df.to_csv(out,header=None,index=None,sep="\t")
     return
 
-def check_source_reloc():
-    with open("invert3d.in") as infile:
-        data = infile.read().split("\n")
-    if data[23].split(" ")[0] == "1":
-        return True
-    return False
-
 def combine_ray_sep_data(out,ray_sep_datafiles):
     ''' Combine data in multiple ordered ray separated datafiles (e.g. `frechet.dat` or `rays.dat`) and save to disk. These files have the general format of ray-specific data separated by headers (rows of data) containing ray information (event id and receiver ordering).
 
@@ -286,7 +286,7 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
             data[idx] = "\t".join(line)
         if "frechet" in out:
             # Check if relocation was turned on - if so, need to correct the last 4 frechet indices.
-            if check_source_reloc():
+            if check_source_inversion():
                 # Modify the final 4 frechet lines per event.
                 for idx in idxs[1:]:
                     for subtract in range(1,5):
@@ -346,17 +346,20 @@ def execute(working_dir):
     working_dir | <str> | path to the working dir where fm3d will be executed. `sources.in` and `receivers.in` must be present in this directory.
     '''
     # Copy input and auxiliary files necessary for fm3d execution from the current working dir.
-    files = ["frechgen.in","interfaces.in","interfacesref.in","propgrid.in","vgrids.in","vgridsref.in","mode_set.in","ak135.hed","ak135.tbl"]
+    files = ["frechgen.in","interfaces.in","interfacesref.in","propgrid.in","vgrids.in","vgridsref.in","mode_set.in","ak135.hed","ak135.tbl","invert3d.in"]
     for f in files:
         try:
             os.symlink(os.path.join(os.getcwd(),f),os.path.join(working_dir,f))
         except:
             print("Failed to find file",f)
+            if check_source_inversion() and f=="invert3d.in":
+                raise FileNotFoundError("With source relocation turned on, invert3d.in must be present in this directory!!!!!!!")
     shutil.copy("frechet.in",working_dir)
     # If source inversion is turned on, then frechgen needs to be rerun in each core's subdirectory.
-    if check_source_inversion():
-        shutil.copy(os.path.join(os.getcwd(),"invert3d.in"),os.path.join(working_dir,"invert3d.in"))
-        fmtomo("frechgen",working_dir)
+    # if check_source_inversion():
+    #     shutil.copy(os.path.join(os.getcwd(),"invert3d.in"),os.path.join(working_dir,"invert3d.in"))
+    # Ensure frechet.in is specific to the core's subset of events.
+    fmtomo("frechgen",working_dir)
     generate_gridsave(working_dir)
     # Execute fm3d.
     fmtomo("fm3d",working_dir)
