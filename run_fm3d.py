@@ -356,12 +356,6 @@ def execute(working_dir):
             os.symlink(os.path.join(os.getcwd(),f),os.path.join(working_dir,f))
         except:
             print("Failed to find file",f)
-            if check_source_inversion() and f=="invert3d.in":
-                raise FileNotFoundError("With source relocation turned on, invert3d.in must be present in this directory!!!!!!!")
-    shutil.copy("frechet.in",working_dir)
-    # If source inversion is turned on, then frechgen needs to be rerun in each core's subdirectory.
-    # if check_source_inversion():
-    #     shutil.copy(os.path.join(os.getcwd(),"invert3d.in"),os.path.join(working_dir,"invert3d.in"))
     # Ensure frechet.in is specific to the core's subset of events.
     fmtomo("frechgen",working_dir)
     generate_gridsave(working_dir)
