@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+# Yingbo Li 2024-2025
+
+# This code is provided as-is without any guarantees that it will work in the desired way.
+
 from multiprocessing import Pool
 import os
 import pandas as pd
