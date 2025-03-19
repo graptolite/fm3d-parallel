@@ -355,7 +355,10 @@ def execute(working_dir):
         try:
             os.symlink(os.path.join(os.getcwd(),f),os.path.join(working_dir,f))
         except:
-            print("Failed to find file",f)
+            if f in ["ak135.hed","ak135.tbl"]:
+                print("Failed to find file",f)
+            else:
+                raise FileNotFoundError("Failed to find required file: %s" % f)
     # Ensure frechet.in is specific to the core's subset of events.
     fmtomo("frechgen",working_dir)
     generate_gridsave(working_dir)
