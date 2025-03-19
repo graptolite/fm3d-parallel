@@ -22,7 +22,7 @@ Changing the start of tomo3d<sup>(1)</sup>:
 
 <details>
 <summary><b><u>Original</u></b></summary>
-```bash
+<pre><code>
 #!/usr/bin/ksh
 #
 # NOTE: If ksh is not available, you may use zsh.
@@ -39,12 +39,13 @@ Changing the start of tomo3d<sup>(1)</sup>:
 #
 # Name of program for calculating FMM traveltimes
 fmm=fm3d
-```
+</code></pre>
+
 </details>
 
 <details open>
 <summary><b><u>Updated</u></b></summary>
-```bash
+<pre><code>
 #!/usr/bin/ksh
 #
 # NOTE: If ksh is not available, you may use zsh.
@@ -52,21 +53,21 @@ fmm=fm3d
 
 PATH=$PATH:&lt;path to folder fmtomo binaries&gt;
 ############################################
-# Script for running multi-parameter
-# tomography program
+\# Script for running multi-parameter
+\# tomography program
 ############################################
-#
+\#
 ########################################################
-# Program and files for solving the forward problem with
-# the Fast Marching Method
+\# Program and files for solving the forward problem with
+\# the Fast Marching Method
 ########################################################
-#
+\#
 ncores_default=2
 ncores="${1:-$ncores_default}"
 echo "Running on $ncores cores"
-# Name of program for calculating FMM traveltimes
+\# Name of program for calculating FMM traveltimes
 fmm="run_fm3d.py $ncores"
-```
+</code></pre>
 </details>
 
 (1) Original script from https://github.com/nrawlinson/FMTOMO.
