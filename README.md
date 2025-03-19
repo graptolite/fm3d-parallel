@@ -1,4 +1,4 @@
-For Linux systems.
+Directory separation based parallelization of fm3d from FMTOMO (https://github.com/nrawlinson/FMTOMO). For use on Linux systems.
 
 # Before Usage
 Place run_fm3d.py into the directory containing the FMTOMO binaries. Open run_fm3d.py and declare this directory as well on line 25. Set this file to be executable.
