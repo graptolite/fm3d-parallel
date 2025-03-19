@@ -307,39 +307,72 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
     return
 
 def combine_arrtimes(arrtimes_fs):
+    ''' Combine the contents of arrtimes.dat from core-distributed folders.
+
+    arrtimes_fs | <list> [<str>] | ordered list of paths to the arrtimes.dat datafiles whose contents are to be combined.
+    '''
+    # Initialize counter for the number of events (sources).
     ev_counter = 0
+    # Initialize list to store the lines of the combined arrtimes.dat file.
     all_lines = []
+    # Iterate through the core-distributed arrtimes.dat folders.
     for i,arrtimes_f in enumerate(arrtimes_fs):
+        # Load the contents of arrtimes.dat in the active directory as a newline separated list.
         with open(arrtimes_f) as infile:
             data = [l for l in infile.read().split("\n") if l.strip()]
-        # Add the overall header just once.
+        # Add the overall header (the same for each of the core-distributed arrtimes.dat files) just once.
         if i == 0:
             all_lines.extend(data[:4])
+        # Isolate the headerless data.
         data = data[4:]
+        # Iterate through the data lines.
         for l in data:
+            # Separate the whitespace-separated data items within each line.
             possible_header = [x for x in l.split(" ") if x.strip()]
+            # Check whether there's more than one item within the line.
             if len(possible_header) > 1:
-                # Is header
+                ## If so, the line is a source header.
+                # Increment the event counter (which corresponds to the source's real/canonical id - i.e. the id of the event when all data is combined).
                 ev_counter += 1
+                # Set the source id specified in the source header to the source's canonical id.
                 possible_header[0] = str(ev_counter)
+                # Store the source header in the combined list.
                 all_lines.append("           " + "           ".join(possible_header))
             else:
+                # Store the line data in the combined list.
                 all_lines.append(l)
+    # Update the line in the header that counts the number of sources with the combined number of sources.
     all_lines[3] = "          " + str(ev_counter)
+    # Save the combined arrtimes.dat contents.
     with open("arrtimes.dat","w") as outfile:
         outfile.write("\n".join(all_lines))
     return
 
 def get_n_sources(wd="./"):
+    ''' Read the number of sources that are active within a working directory.
+
+    wd | <str> | path to working directory.
+
+    Returns: <int> | number of sources specified by sources.in in the working directory.
+    '''
     with open(os.path.join(wd,"sources.in")) as infile:
         n_sources = int(infile.read().split("\n")[0].strip())
     return n_sources
 
 def generate_gridsave(wd):
+    ''' Generate the contents of gridsave.in in a specific directory for all sources within that directory.
+
+    wd | <str> | path to working directory.
+    '''
+    # Determine number of sources that are to be considered by fm3d in the working directory.
     n_sources = get_n_sources(wd)
+    # Initialize string holding the contents of gridsave.in
     gridsave = ""
+    # Iterate through the sources/source ids (which are one-indexed).
     for i in range(1,n_sources+1):
+        # Store the gridsave specification for that source.
         gridsave += "%u 1\n1\n1\n" % i
+    # Write the gridsave string to gridsave.in in the requested working directory.
     with open(os.path.join(wd,"gridsave.in"),"w") as outfile:
         outfile.write(gridsave)
     return
@@ -352,13 +385,13 @@ def execute(working_dir):
     # Copy input and auxiliary files necessary for fm3d execution from the current working dir.
     files = ["frechgen.in","interfaces.in","interfacesref.in","propgrid.in","vgrids.in","vgridsref.in","mode_set.in","ak135.hed","ak135.tbl","invert3d.in"]
     for f in files:
-        try:
-            os.symlink(os.path.join(os.getcwd(),f),os.path.join(working_dir,f))
-        except:
+        if not os.path.exists(os.path.join(os.getcwd(),f)):
             if f in ["ak135.hed","ak135.tbl"]:
                 print("Failed to find file",f)
             else:
                 raise FileNotFoundError("Failed to find required file: %s" % f)
+        else:
+            os.symlink(os.path.join(os.getcwd(),f),os.path.join(working_dir,f))
     # Ensure frechet.in is specific to the core's subset of events.
     fmtomo("frechgen",working_dir)
     generate_gridsave(working_dir)
