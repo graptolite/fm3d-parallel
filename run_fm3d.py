@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
 
-# Yingbo Li 2024-2025
+'''
+run_fm3d.py | directory separation based parallelization of fm3d from <https://github.com/nrawlinson/FMTOMO>
+    Copyright (C) 2025 Yingbo Li
 
-# This code is provided as-is without any guarantees that it will work in the desired way.
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+'''
 
 from multiprocessing import Pool
 import os
