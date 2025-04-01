@@ -109,7 +109,9 @@ def load_receiver_dict(receivers_file="receivers.in"):
     # Initialize dictionary to store the mapping between sources and the receivers that detected them.
     receiver_dict = dict()
     # Iterate through all receivers in the data.
+    moddata = False
     for r in receivers:
+        try:
         # Identify the source that the receiver picked up using the third line (of each receiver data block).
         source_id = int(r.split("\n")[2].strip())
         # Add the receiver to the list of receivers that picked up this source.
@@ -117,7 +119,15 @@ def load_receiver_dict(receivers_file="receivers.in"):
             receiver_dict[source_id].append(r)
         else:
             receiver_dict[source_id] = [r]
-    return receiver_dict
+        except:
+            moddata = True
+            source_ids = [int(x) for x in re.split(r"\s+",r.split("\n")[2].strip())]
+            for source_id in source_ids:
+                if source_id in receiver_dict:
+                    receiver_dict[source_id].append(r)
+                else:
+                    receiver_dict[source_id] = [r]
+    return receiver_dict,moddata
 
 def load_sources_list(sources_file="sources.in"):
     ''' Parse the sources specification file into a list of individual sources specifications.
@@ -157,6 +167,26 @@ def load_sources_list(sources_file="sources.in"):
     sources = [(i+1,"\n".join(lines[source_starts[i]:source_starts[i+1]])) for i in range(len(source_starts)-1)]
     return sources
 
+def reset_moddata_rcv(receiver_blocks,src_ids):
+    print(len(receiver_blocks))
+    # Only works for single layer at the moment.
+    actives = []
+    for block in receiver_blocks:
+        receiver_lines = block.split("\n")
+        rcv_src_ids = re.split(r"\s+",receiver_lines[2].strip())
+        paths = re.split(r"\s+",receiver_lines[3].strip())
+        active = [i for i,x in enumerate(rcv_src_ids) if int(x) in src_ids]
+        #active_rcv_src_ids = [rcv_src_ids[a] for a in active]
+        active_paths = [paths[a] for a in active]
+        active_rcv_src_ids = list(map(str,range(1,len(active)+1)))
+        receiver_lines[1] = "           %u" % len(active)
+        receiver_lines[2] = "           " + "           ".join(active_rcv_src_ids)
+        receiver_lines[3] = "           " + "           ".join(active_paths)
+        actives.append("\n".join(receiver_lines))
+    return actives
+
+
+
 def split_sources(cores,tmp=".tmp"):
     ''' Divide the sources described in sources.in roughly evenly across a number of cores by placing in temporary subfolders.
 
@@ -169,7 +199,7 @@ def split_sources(cores,tmp=".tmp"):
     if not os.path.exists(tmp):
         os.mkdir(tmp)
     # Load dictionary holding relation between sources and the receivers that picked them up.
-    receiver_dict = load_receiver_dict()
+    receiver_dict,moddata = load_receiver_dict()
     # Load list of sources and sourcesref (described by data blocks).
     sources = load_sources_list()
     sources_ref = load_sources_list("sourcesref.in")
@@ -211,6 +241,9 @@ def split_sources(cores,tmp=".tmp"):
             # Store the receivers for the active source to the ordered list of all receivers for the active sublist of sources.
             active_receivers.extend(s_receivers)
         # Write the subfolder's receivers.in containing just the receivers corresponding to sources in the active sources sublist.
+        if moddata:
+            active_receivers = receiver_dict[source_ids[0]]
+            active_receivers = reset_moddata_rcv(active_receivers,source_ids)
         with open(os.path.join(t_wd,"receivers.in"),"w") as outfile:
             outfile.write("\n".join([str(len(active_receivers))] + active_receivers))
         # Store the path of the subfolder.
