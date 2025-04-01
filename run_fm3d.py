@@ -112,13 +112,13 @@ def load_receiver_dict(receivers_file="receivers.in"):
     moddata = False
     for r in receivers:
         try:
-        # Identify the source that the receiver picked up using the third line (of each receiver data block).
-        source_id = int(r.split("\n")[2].strip())
-        # Add the receiver to the list of receivers that picked up this source.
-        if source_id in receiver_dict:
-            receiver_dict[source_id].append(r)
-        else:
-            receiver_dict[source_id] = [r]
+            # Identify the source that the receiver picked up using the third line (of each receiver data block).
+            source_id = int(r.split("\n")[2].strip())
+            # Add the receiver to the list of receivers that picked up this source.
+            if source_id in receiver_dict:
+                receiver_dict[source_id].append(r)
+            else:
+                receiver_dict[source_id] = [r]
         except:
             moddata = True
             source_ids = [int(x) for x in re.split(r"\s+",r.split("\n")[2].strip())]
