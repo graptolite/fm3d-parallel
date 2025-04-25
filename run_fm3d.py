@@ -305,7 +305,7 @@ def combine_arrivals(out,fs):
     df.to_csv(out,header=None,index=None,sep="\t")
     return
 
-def combine_ray_sep_data(out,ray_sep_datafiles):
+def combine_ray_sep_data(out,ray_sep_datafiles,min_n_data_for_header=3):
     ''' Combine data in multiple ordered ray separated datafiles (e.g. `frechet.dat` or `rays.dat`) and save to disk. These files have the general format of ray-specific data separated by headers (rows of data) containing ray information (event id and receiver ordering).
 
     out               | <str>          | path to the file to store the combined output in.
@@ -332,7 +332,7 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
             # Convert string data rows into column-separated data lines.
             l_data = [x for x in l.split(" ") if x]
             # Check whether the active line is a header line (more than 3 data columns) or ray data line.
-            if len(l_data) > 3:
+            if len(l_data) > min_n_data_for_header:
                 # If the active line is a header line, store the line and line index.
                 lines.append(l_data)
                 idxs.append(i)
@@ -349,10 +349,15 @@ def combine_ray_sep_data(out,ray_sep_datafiles):
                 # If so, add this normalized event id to the list of considered, and increment the global event counter.
                 unique_evs.append(ev)
                 counter += 1
-            # Ensure the ray index is as expected.
-            l_data[0] = str(ray_idx)
-            # Ensure the event id in the header line corresponds to the event's global event id, and update the active ray data.
-            l_data[1] = str(counter)
+            if out == "rays.dat":
+                # Set the source ids for rays.dat style data (where the two values after the toplevel header refer to the source).
+                l_data[1] = str(counter)
+                l_data[2] = str(counter)
+            else:
+                # Ensure the ray index is as expected.
+                l_data[0] = str(ray_idx)
+                # Ensure the event id in the header line corresponds to the event's global event id, and update the active ray data.
+                l_data[1] = str(counter)
             lines[i] = l_data
             ray_idx += 1
         # Convert the column-separated data lines back into string rows.
@@ -506,7 +511,7 @@ if __name__=="__main__":
     combine_arrivals("arrivals.dat",arrival_fs)
     combine_ray_sep_data("frechet.dat",frechet_fs)
     if os.path.exists(ray_fs[0]):
-        combine_ray_sep_data("rays.dat",ray_fs)
+        combine_ray_sep_data("rays.dat",ray_fs,min_n_data_for_header=4)
     if os.path.exists(arrtimes_fs[0]):
         combine_arrtimes(arrtimes_fs)
     # Remove the tmp dir.
